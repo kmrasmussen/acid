@@ -2,13 +2,12 @@
 let net = require('net')
 // event-emission for tcp messages
 let events = require('events').EventEmitter
+let ip = require('ip')
 
+const IP_ADDRESS = require('ip').address() 
 const m = 5
 const PORT = 1234
 
-// a chord-network is defined by an id between 0 and a billion
-// the time-stamp when it was defined
-// and a power such that the ring has length 2^power
 function newCertificate(m) {
     let cert = {
         'id': Math.floor(Math.random()*(1000000000)),
@@ -22,13 +21,16 @@ function newCertificate(m) {
 let CERTIFICATE = newCertificate(m)
 // the initialserver places itself in a random place in the ring
 let MYPOSITION = Math.floor(Math.random() * (2 ** m))
-console.log('My position: ' + MYPOSITION)
+//console.log('My position: ' + MYPOSITION)
 // Since the network contains only the initialserver, every finger points to itself
 // the fingertable has format [0<=i<=m-1, pos+2^i, succ for pos+2^i, ip for succ]
 let FINGERTABLE = [...Array(CERTIFICATE.power).keys()].map(
-    i => [i, ((MYPOSITION+(2**i)) % (2 ** CERTIFICATE.power)), MYPOSITION, 'me'])
-console.log('MY FINGERTABLE:')
-console.log(FINGERTABLE)
+    i => [i, ((MYPOSITION+(2**i)) % (2 ** CERTIFICATE.power)), MYPOSITION, [IP_ADDRESS, PORT]])
+
+let SUCCESSOR = [MYPOSITION, [IP_ADDRESS, PORT]]
+let PREDECESSOR = [MYPOSITION, [IP_ADDRESS, PORT]]
+//console.log('MY FINGERTABLE:')
+//console.log(FINGERTABLE)
 
 let myServer = net.createServer((c) => {
     // emitter is used to coordinate events
@@ -49,8 +51,8 @@ let myServer = net.createServer((c) => {
     // and check if it is formmatted by {event: -, content: -}
     // if so we will _emit_ it
     c.on('data', (data) => {
-        console.log('LOGGER on-data:')
-        console.log(data.toString())
+        //console.log('LOGGER on-data:')
+        //console.log(data.toString())
         var message = JSON.parse(data.toString())
         if(message.event && message.content)
           emitter.emit(message.event, message.content)
@@ -63,7 +65,7 @@ let myServer = net.createServer((c) => {
     // it will receive a copy of the initialserver's fingertable to make
     // its own
     emitter.on('INIT_A_REQ', (cont) => {
-        console.log('received INIT_A_REQ')
+        console.log('I ' +  c.remotePort + ' : INIT_A_REQ')
         function validINIT_A_REQ(cont) {
             if (cont.certificate && cont.myPosition)
                 return(cont.myPosition <= (2 ** CERTIFICATE.power))
@@ -82,12 +84,14 @@ let myServer = net.createServer((c) => {
 
     // When a new node connects we send the I_AM with a certificate and our
     // own position
-    console.log('New connection')
+    console.log('I ' + c.remotePort + ' : NEW_CONN')
     c.send('I_AM',
     {
       'certificate': CERTIFICATE,
-      'myPosition': MYPOSITION
+      'myPosition': MYPOSITION,
+      'fingerTable': FINGERTABLE
     })
+    console.log('O ' + c.remotePort + ' : I_AM')
 })
 
 myServer.on('error', (err) => {
@@ -95,6 +99,7 @@ myServer.on('error', (err) => {
 })
 
 // Start server listening
-myServer.listen(PORT, () => {
-    console.log('listening on 1234')
+myServer.listen(PORT, () => {   
+    console.log('ACID - introducer.js')
+    console.log(IP_ADDRESS + ':' + PORT)
 })
