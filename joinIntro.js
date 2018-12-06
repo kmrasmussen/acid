@@ -117,11 +117,17 @@ module.exports.join = (ME, introPort, cbf) => {
                         console.log(ME.FINGERS)
                         ME.FINGERTABLE = constructTable
                         console.log('-Made fingertable')
-                        ME.COMMUNICATOR.getPredecessor(ME.FINGERS[0].port, ME.FINGERS[0].succ, (data) => {
+                        ME.COMMUNICATOR.getPredecessor(ME.FINGERS[0].port, (data) => {
                             console.log('-Got my predecessor')
                             ME.PREDECESSOR = data.answer
-                            console.log('Sending iExist to: ' + ME.PREDECESSOR[1][1])
-                            ME.COMMUNICATOR.sendIExist(ME.PREDECESSOR[1][1])
+                            console.log('Sending iExist to people')
+                            let posParser = new AcidAlgs.AlgClass(this.ME).parser
+                            for(let j = 0; j < ME.CERTIFICATE.power; i++) {
+                                let pPos = posParser(ME.MYPOSITION - 2 ** j)
+                                ME.COMMUNICATOR.getPredecessorOfPosition(pPos, (data) => {
+                                    ME.COMMUNICATOR.sendIExist(data[1][1])
+                                })
+                            }
                             cbf()
                         })
                     }

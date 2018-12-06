@@ -27,10 +27,20 @@ class Communicator {
         this.msg(adresseePort, 'getSuccessor', message)
     }
 
-    getPredecessor(adresseePort, x, cbf) {
+    getSuccessor(x, cbf) {
+        successorOfXinFingers = AcidAlgs.precedesInFingers(ME, x)
+        this.getSuccessorFrom(successorOfXinFingers.port, x, (result) => cbf(result))
+    }
+
+    getPredecessorOfPosition(position, cbf) {
+        this.getSuccessor(position, (result) => {
+            getPredecessor(result.answer.port, (data) => cbf(data))
+        })
+    }
+
+    getPredecessor(adresseePort, cbf) {
         let replyId = this.generateReplyId()
         let message = {
-            x: x,
             replyId: replyId
         }
         this.incomingEmitter.on('replyId-' + replyId, (data) => cbf(data))
@@ -132,8 +142,4 @@ class Communicator {
         }
     }
 }
-
-
-
 module.exports.Communicator = Communicator
-
