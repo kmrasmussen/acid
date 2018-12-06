@@ -18,6 +18,8 @@ class AcidNode {
         // fingertable with other nodes in network I am connected to
         // format: [0<=i<=m-1, pos+2^i, succ for pos+2^i, ip for succ]
         this.FINGERTABLE
+        // new dictionary version of fingertable
+        this.FINGERS
         this.PREDECESSOR
         this.INTERVALSTART
         this.SERVER
@@ -44,11 +46,7 @@ class AcidNode {
             // and check if it is formmatted by {event: -, content: -}
             // if so we will _emit_ it
             c.on('data', (data) => {
-                //console.log('LOGGER on-data:')
-                //console.log(data.toString())
                 let messageStrings = data.toString().split('ACIDMSGDELIMITER')
-                //console.log('ONDATA: messages:')
-                //console.log(messageStrings)
                 messageStrings.forEach((element) => {
                     if(element != "") {
                         var message = JSON.parse(element)
@@ -59,7 +57,15 @@ class AcidNode {
                     }
                 })
             })
+
+            c.on('end', () => {
+                emitter.removeAllListeners()
+                c.destroy()
+                console.log('client close')
+            })
         
+            // Any new connection will get an I_AM with certificate, myposition
+            // and fingertable
             console.log('I ' + c.remotePort + ' : NEW_CONN')
             c.send('I_AM',
             {
@@ -68,7 +74,16 @@ class AcidNode {
               'fingertable': this.FINGERTABLE
             })
             console.log('O ' + c.remotePort + ' : I_AM')
-        
+            
+            c.on('error', (e) => {
+                console.log('c error')
+                console.log(e)
+            })
+
+            // another node used communicatorTools.msg() and it constructed
+            // a message of type commToolsData
+            // here it is handled and if it makes sense it is directed to
+            // COMMUNICATOR.direct()
             emitter.on('commToolsData', (data) => {
                 //console.log('My cert:')
                 //console.log(this.CERTIFICATE)
@@ -82,16 +97,9 @@ class AcidNode {
                     console.log('commToolsData: not same certificate')
             })
 
-            emitter.on('acidResponse', function(data) {
-                if(JSON.stringify(this.CERTIFICATE) == JSON.stringify(data.certificate)) {
-                    if(data.responseId, data.type, data.body) {
-                        this.COMMUNICATOR.incomingResponse(data.responseId, data.type, data.body)
-                    } else {
-                        console.log('commToolsData: lacking type, origin or body')
-                    }
-                } else
-                    console.log('acidResponse: not same certificate')
-            })
+            // this node has sent a request message and the node which knows the answer
+            // responds by making an acidResponse
+            // if it makes sense it is directed to COMMUNICATOR.incomingResponse()
         })
         this.SERVER.listen(this.PORT, () => {   
             console.log('// acid node // ' + this.IP_ADDRESS + ':' + this.PORT)
@@ -99,9 +107,17 @@ class AcidNode {
                 console.log('CERTIFICATE: ')
                 console.log(this.CERTIFICATE)
                 console.log('POSITION: ' + this.MYPOSITION)
+                console.log('PREDECESSOR:')
+                console.log(this.PREDECESSOR)
                 console.log('FINGERTABLE:')
                 console.log(this.FINGERTABLE)
+                console.log('FINGERS:')
+                console.log(this.FINGERS)
             })
+        })
+        this.SERVER.on('error', (err) => {
+            console.log('server error:')
+            console.log(err)
         })
     }
 }

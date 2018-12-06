@@ -12,8 +12,12 @@ module.exports.precedes = (ME, table, x) => {
             }
         }
     }
-    console.log('ÆLLLER?')
     return(table[ME.CERTIFICATE.power - 1])      
+}
+
+module.exports.inInterval = (a, b, x) => {
+    if(a <= b) return((a <= x) && (x <= b))
+    else return((a <= x) || (x <= b))
 }
 
 module.exports.ftDictFull = (ftDict, m) => {

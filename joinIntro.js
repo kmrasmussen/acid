@@ -58,53 +58,75 @@ module.exports.getCertificate = (introPort, cbf) => {
             console.log('ERROR: I_AM invalid')
         }
     })
+
+    client.on('end', () => {
+        emitter.removeAllListeners()
+        client.destroy()
+        console.log('introducer client closed')
+    })
+    client.on('error', (e) => {
+        console.log('introclient error')
+        console.log(e)
+    })
 }
 
 module.exports.join = (ME, introPort, cbf) => {
+    // make a network with just myself
     if(introPort == ME.PORT) {
         console.log('NEW')
         initializeNewNetwork(ME, 5)
         //COMMUNICATOR = new CommunicatorTool(nodeServer, CERTIFICATE, IP_ADDRESS, PORT, MYPOSITION)
         ME.COMMUNICATOR = new CommunicatorTool(ME)
         cbf()
+
+    // join another node
     } else {
         console.log('JOINING ' + introPort)
+        // getCertificate gets certificate, position and fingertable from introducer
         this.getCertificate(introPort, (data) => {
             ME.CERTIFICATE = data.certificate
             ME.MYPOSITION = data.myPosition
-            //console.log('MYPOSITION: ' + ME.MYPOSITION)
-            //console.log('INTRO FT:')
-            //console.log(data.fingertable)
             
             ME.COMMUNICATOR = new CommunicatorTool(ME)
 
-            //console.log('Making my own finger table:')
+            // We will make our own fingertable by calculating the 'starts' in our fingertable
+            // and contacting the closest predecessors to this start according to the
+            // introducers fingertable to get the successor to our starts
+            // this is an asynchrous process where we gradually fill the fingertable
+            // dictionary
             let ftDict = {}
             for(let i = 0; i < ME.CERTIFICATE.power; i++) {
-                //console.log('i: ' + i)
                 let iStart = (ME.MYPOSITION + 2 ** i) % (2 ** ME.CERTIFICATE.power)
-                //console.log('iStart: ' + iStart)
                 let preiStart = AcidAlgs.precedes(ME, data.fingertable, iStart)
-                //console.log('pre iStart: ' + preiStart)
-                //console.log(preiStart)
                 ME.COMMUNICATOR.getSuccessorFrom(preiStart[3][1], iStart, (result) => {
-                    //console.log('succ of ' + iStart + ':')
-                    //console.log(result)
                     ftDict[i] = {
                         start: iStart,
                         succ: result.answer.pos, 
                         ip: result.answer.ip,
                         port: result.answer.port
                     }
+                    // if done with fingertable:
                     if(AcidAlgs.ftDictFull(ftDict, ME.CERTIFICATE.power)) {
-                        ME.FINGERTABLE = ftDict
-                        cbf()
+                        let constructTable = []
+                        for(let i = 0; i < ME.CERTIFICATE.power; i++) {
+                            constructTable.push([i, ftDict[i].start, ftDict[i].succ, [ftDict[i].ip, ftDict[i].port]])
+                        }
+                        // get the predecessor of our successor, which will now be
+                        // our predecessor
+                        ME.FINGERS = ftDict
+                        console.log(ME.FINGERS)
+                        ME.FINGERTABLE = constructTable
+                        console.log('-Made fingertable')
+                        ME.COMMUNICATOR.getPredecessor(ME.FINGERS[0].port, ME.FINGERS[0].succ, (data) => {
+                            console.log('-Got my predecessor')
+                            ME.PREDECESSOR = data.answer
+                            console.log('Sending iExist to: ' + ME.PREDECESSOR[1][1])
+                            ME.COMMUNICATOR.sendIExist(ME.PREDECESSOR[1][1])
+                            cbf()
+                        })
                     }
                 })
             }
-
-
-
         })
     }
 }
@@ -120,8 +142,19 @@ initializeNewNetwork = (ME, m) => {
     }
     ME.MYPOSITION  = Math.floor(Math.random() * (2 ** m))
     ME.FINGERTABLE = [...Array(ME.CERTIFICATE.power).keys()].map(
-        i => [i, ((ME.MYPOSITION+(2**i)) % (2 ** ME.CERTIFICATE.power)), 
+        i => [i, ((ME.MYPOSITION+(2**i)) % (2 ** ME.CERTIFICATE.power)),
                 ME.MYPOSITION, [ME.IP_ADDRESS, ME.PORT]])
+    let fingerDict = {}
+    for(let i = 0; i < ME.CERTIFICATE.power; i++) {
+        fingerDict[i] = {
+            i: i,
+            start: (ME.MYPOSITION+(2**i)) % (2 ** ME.CERTIFICATE.power),
+            succ: ME.MYPOSITION,
+            ip: ME.IP_ADDRESS,
+            port: ME.PORT
+        }
+    }
+    ME.FINGERS = fingerDict
     ME.SUCCESSOR = [ME.MYPOSITION, [ME.IP_ADDRESS, ME.PORT]]
     ME.PREDECESSOR = [ME.MYPOSITION, [ME.IP_ADDRESS, ME.PORT]]
     ME.INTERVALSTART = ME.MYPOSITION + 1
